@@ -6,34 +6,41 @@
 (function Mul (Math Math) Math)
 
 ;; add comm/assoc
-(rewrite (Add a b)
-         (Add b a))
-(rewrite (Add (Add a b) c)
-		 (Add a (Add b c)))
+(rewrite (Add ?a ?b)
+         (Add ?b ?a))
+(rewrite (Add (Add ?a ?b) ?c)
+		 (Add ?a (Add ?b ?c)))
 
 ;; mul comm/assoc
-(rewrite (Mul a b)
-		 (Mul b a))
-(rewrite (Mul (Mul a b) c)
-		 (Mul a (Mul b c)))
+(rewrite (Mul ?a ?b)
+		 (Mul ?b ?a))
+(rewrite (Mul (Mul ?a ?b) ?c)
+		 (Mul ?a (Mul ?b ?c)))
 
 ;; distributivity
-(rewrite (Mul a (Add b c))
-         (Add (Mul a b) (Mul a c)))
+(rewrite (Mul ?a (Add ?b ?c))
+         (Add (Mul ?a ?b) (Mul ?a ?c)))
 ;; factor
-(rewrite (Add (Mul a b) (Mul a c))
-		 (Mul a (Add b c)))
+(rewrite (Add (Mul ?a ?b) (Mul ?a ?c))
+		 (Mul ?a (Add ?b ?c)))
 
 ;; add cancel
-(rewrite (Add (Num 0) a)
-		 a)
+(rewrite (Add (Num 0) ?a)
+		 ?a)
 
 ;; mul cancel
-(rewrite (Mul (Num 0) a) 
+(rewrite (Mul (Num 0) ?a) 
          (Num 0))
-(rewrite (Mul (Num 1) a)
-		 a)
+(rewrite (Mul (Num 1) ?a)
+		 ?a)
 
+;; folding
+(rewrite (Add (Num ?a) (Num ?b))
+		 (Num (+ ?a ?b)))
+(rewrite (Mul (Num ?a) (Num ?b))
+		 (Num (* ?a ?b)))
+
+(optimize (Add (Num 1) (Num 2)))
 (optimize (Add (Num 0) (Add (Num 0) (Var "x"))))
 
 
