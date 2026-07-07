@@ -14,18 +14,18 @@
 //! TermList        -> '(' WhiteSpace Identifier (WhiteSpace TermAtom)* WhiteSpace ')'
 //! Term            -> TermList | TermAtom
 //! SortDecl        -> '(' WhiteSpace 'sort' WhiteSpace Identifier WhiteSpace ')'
-//! FuncDecl        -> (' WhiteSpace 'function' WhiteSpace Identifier WhiteSpace
-//!                     '(' (WhiteSpace Identifier)* WhiteSpace ')'
-//!                     WhiteSpace Identifier (WhiteSpace Identifier WhiteSpace | WhiteSpace) ')'
+//! FuncDecl        -> '(' WhiteSpace 'function' WhiteSpace Identifier WhiteSpace
+//!                         '(' (WhiteSpace Identifier)* WhiteSpace ')'
+//!                         WhiteSpace Identifier (WhiteSpace Identifier WhiteSpace | WhiteSpace) ')'
 //! PropertyDecl    -> (' WhiteSpace 'property' WhiteSpace Identifier WhiteSpace
-//!                     '(' (WhiteSpace Identifier)* WhiteSpace ')'
-//!                     WhiteSpace Identifier WhiteSpace ')'
+//!                         '(' (WhiteSpace Identifier)* WhiteSpace ')'
+//!                         WhiteSpace Identifier WhiteSpace ')'
 //! 
 //! TODO: Support properties as well as terms
 //! RewriteDecl     -> '(' WhiteSpace 'rewrite' WhiteSpace Term WhiteSpace Term WhiteSpace ')'
-//!                    | '(' WhiteSpace 'birewrite' WhiteSpace Term WhiteSpace Term WhiteSpace ')'
-//!                    | '(' WhiteSpace 'rewrite' WhiteSpace Term WhiteSpace Term WhiteSpace Term WhiteSpace ')'
-//!                    | '(' WhiteSpace 'birewrite' WhiteSpace Term WhiteSpace Term WhiteSpace Term WhiteSpace ')'
+//!                         | '(' WhiteSpace 'birewrite' WhiteSpace Term WhiteSpace Term WhiteSpace ')'
+//!                         | '(' WhiteSpace 'rewrite' WhiteSpace Term WhiteSpace Term WhiteSpace Term WhiteSpace ')'
+//!                         | '(' WhiteSpace 'birewrite' WhiteSpace Term WhiteSpace Term WhiteSpace Term WhiteSpace ')'
 //! Optimize        -> '(' WhiteSpace 'optimize' WhiteSpace Term WhiteSpace ')'
 
 use crate::*;
@@ -41,22 +41,31 @@ peg::parser! {
         rule ws()
             = (ws_char() / comment())*
 
-        rule atom_text() -> String
-            = s:$((!(['(' | ')' | ';'] / ws_char()) [_])+) { s.to_string() }
+        rule identifier() -> String
+            = s:$((!(['(' | ')' | ';'] / ws_char()) [_])+) 
+                                        { s.to_string() }
+
+        rule variable() -> String
+            = s:$("?" identifier())     { s.to_string() }
+        
+        rule bool_lit() -> bool
+            = b:$("True" / "False")     { b == "True"}
 
         rule int_lit() -> i64
-            = n:$("-"? ['0'..='9']+) {? n.parse().map_err(|_| "invalid integer") }
+            = n:$("-"? ['0'..='9']+)    {? n.parse().map_err(|_| "invalid integer") }
 
         rule string_lit() -> String
-            = "\"" s:$([^'\"']*) "\"" { s.to_string() }
+            = "\"" s:$([^'\"']*) "\""   { s.to_string() }
 
         rule term_atom() -> Term
-            = n:int_lit() { Term::IntLit(n) }
-            / s:string_lit() { Term::Call(s, vec![]) }
-            / v:atom_text() { Term::Var(v) }
+            = b:bool_lit()              { Term::BoolLit(b) }
+            / n:int_lit()               { Term::IntLit(n) }
+            / s:string_lit()            { Term::Call(s, vec![]) }
+            / v:variable()              { Term::Var(v) }
+            / i:identifier()            { Term::Identifier(i) }
 
         rule term_list() -> Term
-            = "(" ws() f:atom_text() args:(ws() t:term() { t })* ws() ")" {
+            = "(" ws() f:identifier() args:(ws() t:term() { t })* ws() ")" {
                 Term::Call(f, args)
             }
 
@@ -64,19 +73,19 @@ peg::parser! {
             = ws() t:(term_list() / term_atom()) ws() { t }
 
         rule sort_decl() -> Decl
-            = "(" ws() "sort" ws() name:atom_text() ws() ")" {
+            = "(" ws() "sort" ws() name:identifier() ws() ")" {
                 Decl::Sort(Sort { name })
             }
 
         rule function_decl() -> Decl
-            = "(" ws() "function" ws() name:atom_text() ws()
-              "(" args:(ws() a:atom_text() { a })* ws() ")" ws()
-              ret:atom_text() ws() ")" {
+            = "(" ws() "function" ws() name:identifier() ws()
+              "(" args:(ws() a:identifier() { a })* ws() ")" ws()
+              ret:identifier() ws() ")" {
                 Decl::Function(Function { name, args, ret })
             }
 
         rule rewrite_decl() -> Decl
-            = "(" ws() "rewrite" ws() name:atom_text() ws() lhs:term() ws() rhs:term() ws() ")" {
+            = "(" ws() "rewrite" ws() name:identifier() ws() lhs:term() ws() rhs:term() ws() ")" {
                 Decl::Rewrite(Rewrite { name, lhs, rhs })
             }
             / "(" ws() "rewrite" ws() lhs:term() ws() rhs:term() ws() ")" {

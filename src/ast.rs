@@ -6,6 +6,7 @@ type Name = String;
 #[derive(PartialEq)]
 pub enum Term {
     Var(Name),
+    Identifier(Name),
     IntLit(i64),
     StringLit(String),
     BoolLit(bool),
