@@ -70,11 +70,12 @@ Properties provide a way to express analyses that propagate through rewrites. Th
 Rewrites are declared with the either the `rewrite` keyword or the `birewrite` keyword. The difference between the two is self evident. Again enforcing this difference correctly is intentionally left up to the user. Rewrites at minimum require a left hand side and a right hand size, with an optional condition as a third argument. Rewrites can also be named. Symbolic variables that can match any expression are defined with a `?`, reminiscent of the egg toolkit syntax.
 
 ```
+;; A named rewrite
 (rewrite MulCancel (Mul (Num 0) ?a) (Num 0))
-
+;; A birewrite with a condition
 (birewrite (Div ?x ?x) (Num 1) (IsNonZero ?x))
 ```
-Rewrites can also support conditional terms.
+Rewrites can also be used with properties.
 ```
 (rewrite (LessThan (UpperBound ?x) (Num 0)) (IsNonZero ?x))
 ```
