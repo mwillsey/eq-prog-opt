@@ -72,6 +72,7 @@ Rewrites are declared with the either the `rewrite` keyword or the `birewrite` k
 ```
 ;; A named rewrite
 (rewrite MulCancel (Mul (Num 0) ?a) (Num 0))
+
 ;; A birewrite with a condition
 (birewrite (Div ?x ?x) (Num 1) (IsNonZero ?x))
 ```
