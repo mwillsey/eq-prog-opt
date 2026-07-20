@@ -30,6 +30,17 @@
 //! 
 //! Description     -> WhiteSpace ":desc" WhiteSpace StringLiteral WhiteSpace
 //! 
+//! Make            -> WhiteSpace ":make" WhiteSpace StringLiteral WhiteSpace
+//! 
+//! Merge           -> WhiteSpace ":merge" WhiteSpace StringLiteral WhiteSpace
+//! 
+//! Lattice         -> '(' WhiteSpace 'lattice' WhiteSpace Identifier (Description | WhiteSpace)
+//!                         (Make | WhiteSpace) (Merge | WhiteSpace) ')'
+//! 
+//! Analysis        -> '(' WhiteSpace 'analysis' WhiteSpace Identifier WhiteSpace
+//!                         '(' (WhiteSpace Identifier)* WhiteSpace ')'
+//!                         WhiteSpace Identifier (Description | WhiteSpace) ')'
+//! 
 //! Primitive       -> '(' WhiteSpace 'primitive' WhiteSpace Identifier WhiteSpace
 //!                         '(' (WhiteSpace Identifier)* WhiteSpace ')'
 //!                         WhiteSpace Identifier (Description | WhiteSpace) ')'
@@ -90,9 +101,101 @@ peg::parser! {
                 Decl::Constructor(Constructor { name, args, ret })
             }
 
+        rule make() -> String
+            = ws() ":make" ws() make:string_lit() ws() {
+                make
+            }
+
+        rule merge() -> String
+            = ws() ":merge" ws() merge:string_lit() ws() {
+                merge
+            }
+
         rule description() -> String
             = ws() ":desc" ws() desc:string_lit() ws() {
                 desc
+            }
+
+        rule lattice_decl() -> Decl
+            = "(" ws() "lattice" ws() name:identifier() ws() ")" {
+                Decl::Lattice(Lattice { 
+                    name, 
+                    desc: None, 
+                    make: None, 
+                    merge: None,  
+                })
+            }
+            / "(" ws() "lattice" ws() name:identifier() ws() desc:description() ws() ")" {
+                Decl::Lattice(Lattice { 
+                    name, 
+                    desc: Some(desc), 
+                    make: None, 
+                    merge: None, 
+                })
+            }
+            / "(" ws() "lattice" ws() name:identifier() ws() make:make() ws() ")" {
+                Decl::Lattice(Lattice { 
+                    name, 
+                    desc: None, 
+                    make: Some(make), 
+                    merge: None, 
+                })
+            }
+            / "(" ws() "lattice" ws() name:identifier() ws() merge:merge() ws() ")" {
+                Decl::Lattice(Lattice { 
+                    name, 
+                    desc: None, 
+                    make: None, 
+                    merge: Some(merge), 
+                })
+            }
+            / "(" ws() "lattice" ws() name:identifier() ws() desc:description() ws()
+                make:make() ws() ")" {
+                    Decl::Lattice(Lattice { 
+                        name, 
+                        desc: Some(desc), 
+                        make: Some(make), 
+                        merge: None
+                    })
+            }
+            / "(" ws() "lattice" ws() name:identifier() ws() desc:description() ws()
+                merge:merge() ws() ")" {
+                    Decl::Lattice(Lattice { 
+                        name, 
+                        desc: Some(desc), 
+                        make: None, 
+                        merge: Some(merge)
+                    })
+            }
+            / "(" ws() "lattice" ws() name:identifier() ws() make:make() ws()
+                merge:merge() ws() ")" {
+                    Decl::Lattice(Lattice { 
+                        name, 
+                        desc: None, 
+                        make: Some(make), 
+                        merge: Some(merge)
+                    })
+            }
+            / "(" ws() "lattice" ws() name:identifier() ws() desc:description() ws()
+                make:make() ws() merge:merge() ws() ")" {
+                Decl::Lattice(Lattice { 
+                    name, 
+                    desc: Some(desc), 
+                    make: Some(make), 
+                    merge: Some(merge),
+                })
+            }
+
+        rule analysis_decl() -> Decl
+            = "(" ws() "analysis" ws() name:identifier() ws()
+              "(" args:(ws() a:identifier() { a })* ws() ")" ws()
+              ret:identifier() ws() desc:description() ")" {
+                Decl::Analysis(Analysis { name, args, ret, desc: Some(desc) })
+            }
+            / "(" ws() "analysis" ws() name:identifier() ws()
+              "(" args:(ws() a:identifier() { a })* ws() ")" ws()
+              ret:identifier() ws() ")" {
+                Decl::Analysis(Analysis { name, args, ret, desc: None })
             }
 
         rule primitive_decl() -> Decl
@@ -202,6 +305,8 @@ peg::parser! {
             = sort_decl()
             / constructor_decl()
             / primitive_decl()
+            / lattice_decl()
+            / analysis_decl()
             / rewrite_decl()
             / birewrite_decl()
             / optimize_decl()
@@ -287,6 +392,67 @@ mod tests {
             args: vec!["Sort1".to_string(), "Sort2".to_string()],
             ret: "Ret".to_string(),
             desc: Some("This is it".to_string())
+        });
+        assert!(output.is_ok());
+        assert!(output.unwrap() == expected_output);
+    }
+
+    #[test]
+    fn parse_lattice_no_desc() {
+        // intentionally testing whitespace
+        let input: &str = "( lattice \n MyName )";
+        let output: Result<Decl> = parse_decl(input);
+        let expected_output: Decl = Decl::Lattice( Lattice {
+            name: "MyName".to_string(),
+            desc: None,
+            make: None,
+            merge: None
+        });
+        assert!(output.is_ok());
+        assert!(output.unwrap() == expected_output);
+    }
+
+    #[test]
+    fn parse_lattice_with_desc() {
+        // intentionally testing whitespace
+        let input: &str = "( lattice \n MyName :desc \"description\" )";
+        let output: Result<Decl> = parse_decl(input);
+        let expected_output: Decl = Decl::Lattice( Lattice {
+            name: "MyName".to_string(),
+            desc: Some("description".to_string()),
+            make: None,
+            merge: None
+        });
+        assert!(output.is_ok());
+        assert!(output.unwrap() == expected_output);
+    }
+
+    #[test]
+    fn parse_lattice_with_desc_and_make() {
+        // intentionally testing whitespace
+        let input: &str = "( lattice \n MyName :desc \"description\" \n :make \t \"make\")";
+        let output: Result<Decl> = parse_decl(input);
+        let expected_output: Decl = Decl::Lattice( Lattice {
+            name: "MyName".to_string(),
+            desc: Some("description".to_string()),
+            make: Some("make".to_string()),
+            merge: None
+        });
+        assert!(output.is_ok());
+        assert!(output.unwrap() == expected_output);
+    }
+
+    #[test]
+    fn parse_lattice_with_desc_and_make_plus_merge() {
+        // intentionally testing whitespace
+        let input: &str = "( lattice \n MyName :desc \"description\" \n :make \t \"make\"
+        \t\t :merge \t \"merge\"\t )";
+        let output: Result<Decl> = parse_decl(input);
+        let expected_output: Decl = Decl::Lattice( Lattice {
+            name: "MyName".to_string(),
+            desc: Some("description".to_string()),
+            make: Some("make".to_string()),
+            merge: Some("merge".to_string()),
         });
         assert!(output.is_ok());
         assert!(output.unwrap() == expected_output);

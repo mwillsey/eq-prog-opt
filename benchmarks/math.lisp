@@ -1,10 +1,10 @@
 (sort Math)
 
 ;; Direct implementation required
-(primitive Add (Math Math) Math)
-(primitive Sub (Math Math) Math)
-(primitive Mul (Math Math) Math)
-(primitive Div (Math Math) Math)
+(primitive + (i64 i64) i64)
+(primitive - (i64 i64) i64)
+(primitive * (i64 i64) i64)
+(primitive / (i64 i64) i64)
 (primitive IsNotZero (Math) Bool
 	:desc "Return True if the input argument != 0, else False.")
 
@@ -15,13 +15,14 @@
 			 Else return None."
 	:merge  "Assert both constants are identical, otherwise error.")
 
-(analysis GetConst (Math) Const)
-
 
 ;; Direct implementation not required
 (constructor Num (i64) Math)
 (constructor Var (String) Math)
-
+(constructor Add (Math Math) Math)
+(constructor Sub (Math Math) Math)
+(constructor Mul (Math Math) Math)
+(constructor Div (Math Math) Math)
 
 ;; add comm/assoc
 (rewrite (Add ?a ?b)
@@ -81,6 +82,17 @@
 (rewrite (Mul ?a (Div (Num 1) ?a))
 		 (Num 1)
 		 :when (IsNotZero ?a))
+
+;; folding
+(rewrite (Add (Num ?a) (Num ?b))
+		 (Num (+ ?a ?b)))
+(rewrite (Sub (Num ?a) (Num ?b))
+		 (Num (- ?a ?b)))
+(rewrite (Mul (Num ?a) (Num ?b))
+		 (Num (* ?a ?b)))
+(rewrite (Div (Num ?a) (Num ?b))
+		 (Num (/ ?a ?b)))
+
 
 (optimize (Add (Mul (Var "y") (Add (Var "x") (Var "y")))
 			   (Sub (Add (Var "x") (Num 2)) (Add (Var "x") (Var "x")))))

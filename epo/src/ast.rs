@@ -7,6 +7,8 @@ pub enum Decl {
     Sort(Sort),
     Constructor(Constructor),
     Primitive(Primitive),
+    Lattice(Lattice),
+    Analysis(Analysis),
     Rewrite(Rewrite),
     Optimize(Optimize),
 }
@@ -25,6 +27,22 @@ pub struct Constructor {
 
 #[derive(PartialEq, Debug)]
 pub struct Primitive {
+    pub name: Name,
+    pub args: Vec<Name>,
+    pub ret: Name,
+    pub desc: Option<String>
+}
+
+#[derive(PartialEq, Debug)]
+pub struct Lattice {
+    pub name: Name,
+    pub desc: Option<String>,
+    pub make: Option<String>,
+    pub merge: Option<String>,
+}
+
+#[derive(PartialEq, Debug)]
+pub struct Analysis {
     pub name: Name,
     pub args: Vec<Name>,
     pub ret: Name,
@@ -77,6 +95,8 @@ pub struct Program {
     pub sorts: Vec<Sort>,
     pub constructors: Vec<Constructor>,
     pub primitives: Vec<Primitive>,
+    pub lattices: Vec<Lattice>,
+    pub analysis: Vec<Analysis>,
     pub rewrites: Vec<Rewrite>,
     pub optimize: Vec<Optimize>,
 }
@@ -87,6 +107,8 @@ impl Program {
             Decl::Sort(s) => self.sorts.push(s),
             Decl::Constructor(c) => self.constructors.push(c),
             Decl::Primitive(p) => self.primitives.push(p),
+            Decl::Lattice(l) => self.lattices.push(l),
+            Decl::Analysis(a) => self.analysis.push(a),
             Decl::Rewrite(mut r) => {
                 match &mut r {
                     Rewrite::Rewrite(re) => {
@@ -110,6 +132,8 @@ impl Program {
             sorts: vec![],
             constructors: vec![],
             primitives: vec![],
+            lattices: vec![],
+            analysis: vec![],
             rewrites: vec![],
             optimize: vec![],
         };
