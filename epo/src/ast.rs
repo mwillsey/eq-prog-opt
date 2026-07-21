@@ -5,8 +5,10 @@ type Name = String;
 #[derive(PartialEq, Debug)]
 pub enum Decl {
     Sort(Sort),
-    Function(Function),
-    Property(Property),
+    Constructor(Constructor),
+    Primitive(Primitive),
+    Lattice(Lattice),
+    Analysis(Analysis),
     Rewrite(Rewrite),
     Optimize(Optimize),
 }
@@ -17,27 +19,48 @@ pub struct Sort {
 }
 
 #[derive(PartialEq, Debug)]
-pub struct Function {
-    pub name: Name,
-    pub args: Vec<Name>,
-    pub ret: Name,
-    pub cost: Option<i64>,
-}
-
-#[derive(PartialEq, Debug)]
-pub struct Property {
+pub struct Constructor {
     pub name: Name,
     pub args: Vec<Name>,
     pub ret: Name,
 }
 
 #[derive(PartialEq, Debug)]
-pub struct Rewrite {
+pub struct Primitive {
+    pub name: Name,
+    pub args: Vec<Name>,
+    pub ret: Name,
+    pub desc: Option<String>
+}
+
+#[derive(PartialEq, Debug)]
+pub struct Lattice {
+    pub name: Name,
+    pub desc: Option<String>,
+    pub make: Option<String>,
+    pub merge: Option<String>,
+}
+
+#[derive(PartialEq, Debug)]
+pub struct Analysis {
+    pub name: Name,
+    pub args: Vec<Name>,
+    pub ret: Name,
+    pub desc: Option<String>
+}
+
+#[derive(PartialEq, Debug)]
+pub enum Rewrite {
+    Rewrite(RewriteVariant),
+    BiRewrite(RewriteVariant),
+}
+
+#[derive(PartialEq, Debug)]
+pub struct RewriteVariant {
     pub name: Name,
     pub lhs: Term,
     pub rhs: Term,
-    pub cond: Option<Term>,
-    pub is_bidirectional: bool,
+    pub cond: Option<Term>
 }
 
 #[derive(PartialEq, Debug)]
@@ -49,7 +72,6 @@ pub struct Optimize {
 pub enum Term {
     Var(Name),
     IntLit(i64),
-    BoolLit(bool),
     Call(Name, Vec<Term>),
 }
 
@@ -65,15 +87,16 @@ impl std::fmt::Display for Term {
                 }
                 write!(f, ")")
             }
-            _ => Ok(()),
         }
     }
 }
 
 pub struct Program {
     pub sorts: Vec<Sort>,
-    pub funcs: Vec<Function>,
-    pub props: Vec<Property>,
+    pub constructors: Vec<Constructor>,
+    pub primitives: Vec<Primitive>,
+    pub lattices: Vec<Lattice>,
+    pub analysis: Vec<Analysis>,
     pub rewrites: Vec<Rewrite>,
     pub optimize: Vec<Optimize>,
 }
@@ -82,11 +105,21 @@ impl Program {
     pub fn add_decl(&mut self, decl: Decl) -> Result<()> {
         match decl {
             Decl::Sort(s) => self.sorts.push(s),
-            Decl::Function(f) => self.funcs.push(f),
-            Decl::Property(p) => self.props.push(p),
+            Decl::Constructor(c) => self.constructors.push(c),
+            Decl::Primitive(p) => self.primitives.push(p),
+            Decl::Lattice(l) => self.lattices.push(l),
+            Decl::Analysis(a) => self.analysis.push(a),
             Decl::Rewrite(mut r) => {
-                // unique-ify rewrite names by appending the current number of rewrites
-                r.name = format!("{}.{}", r.name, self.rewrites.len());
+                match &mut r {
+                    Rewrite::Rewrite(re) => {
+                        // unique-ify rewrite names by appending the current number of rewrites
+                        re.name = format!("{}.{}", re.name, self.rewrites.len());
+                    },
+                    Rewrite::BiRewrite(bire) => {
+                        // unique-ify rewrite names by appending the current number of rewrites
+                        bire.name = format!("{}.{}", bire.name, self.rewrites.len());
+                    }
+                };
                 self.rewrites.push(r)
             }
             Decl::Optimize(o) => self.optimize.push(o),
@@ -97,8 +130,10 @@ impl Program {
     pub fn from_decls(decls: Vec<Decl>) -> Result<Self> {
         let mut prog = Program {
             sorts: vec![],
-            funcs: vec![],
-            props: vec![],
+            constructors: vec![],
+            primitives: vec![],
+            lattices: vec![],
+            analysis: vec![],
             rewrites: vec![],
             optimize: vec![],
         };

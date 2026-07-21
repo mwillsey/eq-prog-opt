@@ -16,8 +16,6 @@
 //!
 //! StringLiteral   -> '"' [_] '"'
 //!
-//! BoolLiteral     -> 'True' | 'False'
-//!
 //! TermAtom        -> BoolLiteral | IntegerLiteral | StringLiteral | Variable | Identifier
 //!
 //! TermList        -> '(' WhiteSpace Identifier (WhiteSpace Term)* WhiteSpace ')'
@@ -26,18 +24,35 @@
 //!
 //! SortDecl        -> '(' WhiteSpace 'sort' WhiteSpace Identifier WhiteSpace ')'
 //!
-//! FuncDecl        -> '(' WhiteSpace 'function' WhiteSpace Identifier WhiteSpace
+//! Constructor     -> '(' WhiteSpace 'constructor' WhiteSpace Identifier WhiteSpace
 //!                         '(' (WhiteSpace Identifier)* WhiteSpace ')'
-//!                         WhiteSpace Identifier (WhiteSpace Identifier WhiteSpace | WhiteSpace) ')'
+//!                         WhiteSpace Identifier WhiteSpace ')'
+//! 
+//! Description     -> WhiteSpace ":desc" WhiteSpace StringLiteral WhiteSpace
+//! 
+//! Make            -> WhiteSpace ":make" WhiteSpace StringLiteral WhiteSpace
+//! 
+//! Merge           -> WhiteSpace ":merge" WhiteSpace StringLiteral WhiteSpace
+//! 
+//! Lattice         -> '(' WhiteSpace 'lattice' WhiteSpace Identifier (Description | WhiteSpace)
+//!                         (Make | WhiteSpace) (Merge | WhiteSpace) ')'
+//! 
+//! Analysis        -> '(' WhiteSpace 'analysis' WhiteSpace Identifier WhiteSpace
+//!                         '(' (WhiteSpace Identifier)* WhiteSpace ')'
+//!                         WhiteSpace Identifier (Description | WhiteSpace) ')'
+//! 
+//! Primitive       -> '(' WhiteSpace 'primitive' WhiteSpace Identifier WhiteSpace
+//!                         '(' (WhiteSpace Identifier)* WhiteSpace ')'
+//!                         WhiteSpace Identifier (Description | WhiteSpace) ')'
 //!
 //! NOTE: Rewrites can also have names but those are left out here for conciseness
-//! RewriteDecl     -> '(' WhiteSpace ('rewrite' / 'birewrite')
+//! Bi/RewriteDecl  -> '(' WhiteSpace ('rewrite' / 'birewrite')
 //!                         WhiteSpace Term WhiteSpace Term WhiteSpace ')'
 //!                     | '(' WhiteSpace ('rewrite' / 'birewrite')
 //!                         WhiteSpace Term WhiteSpace Term WhiteSpace
 //!                         ":when" WhiteSpace Term WhiteSpace ')'
 //!
-//! Optimize        -> '(' WhiteSpace 'optimize' WhiteSpace Term WhiteSpace ')'
+//! Optimize        -> '(' WhiteSpace 'optimize' WhiteSpace Term (WhiteSpace  ')'
 
 use crate::*;
 
@@ -55,9 +70,6 @@ peg::parser! {
         rule identifier() -> String
             = s:$((!(['(' | ')' | ';'] / ws_char()) [_])+) { s.to_string() }
 
-        rule bool_lit() -> bool
-            = b:$("True" / "False")     { b == "True"}
-
         rule int_lit() -> i64
             = n:$("-"? ['0'..='9']+)    {? n.parse().map_err(|_| "invalid integer") }
 
@@ -65,8 +77,7 @@ peg::parser! {
             = "\"" s:$([^'\"']*) "\""   { s.to_string() }
 
         rule term_atom() -> Term
-            = b:bool_lit()              { Term::BoolLit(b) }
-            / n:int_lit()               { Term::IntLit(n) }
+            = n:int_lit()               { Term::IntLit(n) }
             / s:string_lit()            { Term::Var(s) }
             / i:identifier()            { Term::Var(i) }
 
@@ -83,62 +94,205 @@ peg::parser! {
                 Decl::Sort(Sort { name })
             }
 
-        rule function_decl() -> Decl
-            = "(" ws() "function" ws() name:identifier() ws()
-              "(" args:(ws() a:identifier() { a })* ws() ")" ws()
-              ret:identifier() ws() cost:int_lit() ws() ")" {
-                Decl::Function(Function { name, args, ret, cost: Some(cost) })
-            }
-            / "(" ws() "function" ws() name:identifier() ws()
+        rule constructor_decl() -> Decl
+            = "(" ws() "constructor" ws() name:identifier() ws()
               "(" args:(ws() a:identifier() { a })* ws() ")" ws()
               ret:identifier() ws() ")" {
-                Decl::Function(Function { name, args, ret, cost: None })
+                Decl::Constructor(Constructor { name, args, ret })
+            }
+
+        rule make() -> String
+            = ws() ":make" ws() make:string_lit() ws() {
+                make
+            }
+
+        rule merge() -> String
+            = ws() ":merge" ws() merge:string_lit() ws() {
+                merge
+            }
+
+        rule description() -> String
+            = ws() ":desc" ws() desc:string_lit() ws() {
+                desc
+            }
+
+        rule lattice_decl() -> Decl
+            = "(" ws() "lattice" ws() name:identifier() ws() ")" {
+                Decl::Lattice(Lattice { 
+                    name, 
+                    desc: None, 
+                    make: None, 
+                    merge: None,  
+                })
+            }
+            / "(" ws() "lattice" ws() name:identifier() ws() desc:description() ws() ")" {
+                Decl::Lattice(Lattice { 
+                    name, 
+                    desc: Some(desc), 
+                    make: None, 
+                    merge: None, 
+                })
+            }
+            / "(" ws() "lattice" ws() name:identifier() ws() make:make() ws() ")" {
+                Decl::Lattice(Lattice { 
+                    name, 
+                    desc: None, 
+                    make: Some(make), 
+                    merge: None, 
+                })
+            }
+            / "(" ws() "lattice" ws() name:identifier() ws() merge:merge() ws() ")" {
+                Decl::Lattice(Lattice { 
+                    name, 
+                    desc: None, 
+                    make: None, 
+                    merge: Some(merge), 
+                })
+            }
+            / "(" ws() "lattice" ws() name:identifier() ws() desc:description() ws()
+                make:make() ws() ")" {
+                    Decl::Lattice(Lattice { 
+                        name, 
+                        desc: Some(desc), 
+                        make: Some(make), 
+                        merge: None
+                    })
+            }
+            / "(" ws() "lattice" ws() name:identifier() ws() desc:description() ws()
+                merge:merge() ws() ")" {
+                    Decl::Lattice(Lattice { 
+                        name, 
+                        desc: Some(desc), 
+                        make: None, 
+                        merge: Some(merge)
+                    })
+            }
+            / "(" ws() "lattice" ws() name:identifier() ws() make:make() ws()
+                merge:merge() ws() ")" {
+                    Decl::Lattice(Lattice { 
+                        name, 
+                        desc: None, 
+                        make: Some(make), 
+                        merge: Some(merge)
+                    })
+            }
+            / "(" ws() "lattice" ws() name:identifier() ws() desc:description() ws()
+                make:make() ws() merge:merge() ws() ")" {
+                Decl::Lattice(Lattice { 
+                    name, 
+                    desc: Some(desc), 
+                    make: Some(make), 
+                    merge: Some(merge),
+                })
+            }
+
+        rule analysis_decl() -> Decl
+            = "(" ws() "analysis" ws() name:identifier() ws()
+              "(" args:(ws() a:identifier() { a })* ws() ")" ws()
+              ret:identifier() ws() desc:description() ")" {
+                Decl::Analysis(Analysis { name, args, ret, desc: Some(desc) })
+            }
+            / "(" ws() "analysis" ws() name:identifier() ws()
+              "(" args:(ws() a:identifier() { a })* ws() ")" ws()
+              ret:identifier() ws() ")" {
+                Decl::Analysis(Analysis { name, args, ret, desc: None })
+            }
+
+        rule primitive_decl() -> Decl
+            = "(" ws() "primitive" ws() name:identifier() ws()
+              "(" args:(ws() a:identifier() { a })* ws() ")" ws()
+              ret:identifier() ws() desc:description() ")" {
+                Decl::Primitive(Primitive { name, args, ret, desc: Some(desc) })
+            }
+            / "(" ws() "primitive" ws() name:identifier() ws()
+              "(" args:(ws() a:identifier() { a })* ws() ")" ws()
+              ret:identifier() ws() ")" {
+                Decl::Primitive(Primitive { name, args, ret, desc: None })
             }
 
         rule rewrite_decl() -> Decl
-            = "(" ws() bid:$("birewrite" / "rewrite") ws() name:identifier() ws() lhs:term()
+            = "(" ws() "rewrite" ws() name:identifier() ws() lhs:term()
                 ws() rhs:term() ws() ":when" ws() c:term() ws() ")" {
                 Decl::Rewrite(
-                    Rewrite {
+                    Rewrite::Rewrite( RewriteVariant {
                         name,
                         lhs,
                         rhs,
-                        cond: Some(c),
-                        is_bidirectional: bid == "birewrite"
-                    }
+                        cond: Some(c)
+                    })
                 )
             }
-            / "(" ws() bid:$("birewrite" / "rewrite") ws() name:identifier() ws() lhs:term() ws() rhs:term() ws() ")" {
+            / "(" ws() "rewrite" ws() name:identifier() ws() lhs:term() ws() rhs:term() ws() ")" {
                 Decl::Rewrite(
-                    Rewrite {
+                    Rewrite::Rewrite( RewriteVariant {
                         name,
                         lhs,
                         rhs,
-                        cond: None,
-                        is_bidirectional: bid == "birewrite"
-                    }
+                        cond: None
+                    })
                 )
             }
-            / "(" ws() bid:$("birewrite" / "rewrite") ws() lhs:term() ws() rhs:term() ws() ":when" ws()  c:term() ws() ")" {
+            / "(" ws() "rewrite" ws() lhs:term() ws() rhs:term() ws() ":when" ws() c:term() ws() ")" {
                 Decl::Rewrite(
-                    Rewrite {
-                        name: String::new(),
+                    Rewrite::Rewrite( RewriteVariant {
+                        name: String::from(""),
                         lhs,
                         rhs,
-                        cond: Some(c),
-                        is_bidirectional: bid == "birewrite"
-                    }
+                        cond: Some(c)
+                    })
                 )
             }
-            / "(" ws() bid:$("birewrite" / "rewrite") ws() lhs:term() ws() rhs:term() ws() ")" {
+            / "(" ws() "rewrite" ws() lhs:term() ws() rhs:term() ws() ")" {
                 Decl::Rewrite(
-                    Rewrite {
-                        name: String::new(),
+                    Rewrite::Rewrite( RewriteVariant {
+                        name: String::from(""),
                         lhs,
                         rhs,
-                        cond: None,
-                        is_bidirectional: bid == "birewrite"
-                    }
+                        cond: None
+                    })
+                )
+            }
+
+        rule birewrite_decl() -> Decl
+            = "(" ws() "birewrite" ws() name:identifier() ws() lhs:term()
+                ws() rhs:term() ws() ":when" ws() c:term() ws() ")" {
+                Decl::Rewrite(
+                    Rewrite::BiRewrite( RewriteVariant {
+                        name,
+                        lhs,
+                        rhs,
+                        cond: Some(c)
+                    })
+                )
+            }
+            / "(" ws() "birewrite" ws() name:identifier() ws() lhs:term() ws() rhs:term() ws() ")" {
+                Decl::Rewrite(
+                    Rewrite::BiRewrite( RewriteVariant {
+                        name,
+                        lhs,
+                        rhs,
+                        cond: None
+                    })
+                )
+            }
+            / "(" ws() "birewrite" ws() lhs:term() ws() rhs:term() ws() ":when" ws() c:term() ws() ")" {
+                Decl::Rewrite(
+                    Rewrite::BiRewrite( RewriteVariant {
+                        name: String::from(""),
+                        lhs,
+                        rhs,
+                        cond: Some(c)
+                    })
+                )
+            }
+            / "(" ws() "birewrite" ws() lhs:term() ws() rhs:term() ws() ")" {
+                Decl::Rewrite(
+                    Rewrite::BiRewrite( RewriteVariant {
+                        name: String::from(""),
+                        lhs,
+                        rhs,
+                        cond: None
+                    })
                 )
             }
 
@@ -149,8 +303,12 @@ peg::parser! {
 
         rule decl() -> Decl
             = sort_decl()
-            / function_decl()
+            / constructor_decl()
+            / primitive_decl()
+            / lattice_decl()
+            / analysis_decl()
             / rewrite_decl()
+            / birewrite_decl()
             / optimize_decl()
 
         pub rule parse_term() -> Term
@@ -176,6 +334,9 @@ pub fn parse_decls(input: &str) -> Result<Vec<Decl>> {
     sexp_parser::parse_decls(input).map_err(|e| e.to_string())
 }
 
+
+/// Parsing unit tests with limited but sufficient coverage.
+/// More edge cases will be handled by integration tests down the pipeline.
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -193,28 +354,105 @@ mod tests {
     }
 
     #[test]
-    fn parse_func() {
+    fn parse_constructor() {
         // intentionally testing whitespace
-        // no cost
-        let input: &str = "(function \n MyName (Sort1 \n Sort2  )  Ret)";
+        let input: &str = "(constructor \n MyName (Sort1 \n Sort2  )  Ret)";
         let output: Result<Decl> = parse_decl(input);
-        let expected_output: Decl = Decl::Function(Function {
+        let expected_output: Decl = Decl::Constructor(Constructor {
             name: "MyName".to_string(),
             args: vec!["Sort1".to_string(), "Sort2".to_string()],
-            ret: "Ret".to_string(),
-            cost: None,
+            ret: "Ret".to_string()
         });
         assert!(output.is_ok());
         assert!(output.unwrap() == expected_output);
+    }
 
-        // with cost
-        let input: &str = "(function \n MyName (Sort1 \n Sort2  )  Ret 51)";
+    #[test]
+    fn parse_primitive_no_desc() {
+        // intentionally testing whitespace
+        let input: &str = "( primitive \n MyName (Sort1 \n Sort2  )  Ret)";
         let output: Result<Decl> = parse_decl(input);
-        let expected_output: Decl = Decl::Function(Function {
+        let expected_output: Decl = Decl::Primitive(Primitive {
             name: "MyName".to_string(),
             args: vec!["Sort1".to_string(), "Sort2".to_string()],
             ret: "Ret".to_string(),
-            cost: Some(51),
+            desc: None
+        });
+        assert!(output.is_ok());
+        assert!(output.unwrap() == expected_output);
+    }
+
+    #[test]
+    fn parse_primitive_with_desc() {
+        // intentionally testing whitespace
+        let input: &str = "( primitive \n MyName (Sort1 \n Sort2  )  Ret  :desc \"This is it\" )";
+        let output: Result<Decl> = parse_decl(input);
+        let expected_output: Decl = Decl::Primitive(Primitive {
+            name: "MyName".to_string(),
+            args: vec!["Sort1".to_string(), "Sort2".to_string()],
+            ret: "Ret".to_string(),
+            desc: Some("This is it".to_string())
+        });
+        assert!(output.is_ok());
+        assert!(output.unwrap() == expected_output);
+    }
+
+    #[test]
+    fn parse_lattice_no_desc() {
+        // intentionally testing whitespace
+        let input: &str = "( lattice \n MyName )";
+        let output: Result<Decl> = parse_decl(input);
+        let expected_output: Decl = Decl::Lattice( Lattice {
+            name: "MyName".to_string(),
+            desc: None,
+            make: None,
+            merge: None
+        });
+        assert!(output.is_ok());
+        assert!(output.unwrap() == expected_output);
+    }
+
+    #[test]
+    fn parse_lattice_with_desc() {
+        // intentionally testing whitespace
+        let input: &str = "( lattice \n MyName :desc \"description\" )";
+        let output: Result<Decl> = parse_decl(input);
+        let expected_output: Decl = Decl::Lattice( Lattice {
+            name: "MyName".to_string(),
+            desc: Some("description".to_string()),
+            make: None,
+            merge: None
+        });
+        assert!(output.is_ok());
+        assert!(output.unwrap() == expected_output);
+    }
+
+    #[test]
+    fn parse_lattice_with_desc_and_make() {
+        // intentionally testing whitespace
+        let input: &str = "( lattice \n MyName :desc \"description\" \n :make \t \"make\")";
+        let output: Result<Decl> = parse_decl(input);
+        let expected_output: Decl = Decl::Lattice( Lattice {
+            name: "MyName".to_string(),
+            desc: Some("description".to_string()),
+            make: Some("make".to_string()),
+            merge: None
+        });
+        assert!(output.is_ok());
+        assert!(output.unwrap() == expected_output);
+    }
+
+    #[test]
+    fn parse_lattice_with_desc_and_make_plus_merge() {
+        // intentionally testing whitespace
+        let input: &str = "( lattice \n MyName :desc \"description\" \n :make \t \"make\"
+        \t\t :merge \t \"merge\"\t )";
+        let output: Result<Decl> = parse_decl(input);
+        let expected_output: Decl = Decl::Lattice( Lattice {
+            name: "MyName".to_string(),
+            desc: Some("description".to_string()),
+            make: Some("make".to_string()),
+            merge: Some("merge".to_string()),
         });
         assert!(output.is_ok());
         assert!(output.unwrap() == expected_output);
@@ -226,13 +464,12 @@ mod tests {
         // one way rewrite with name
         let input: &str = "(rewrite \n MyName ?a \t ?b)";
         let output: Result<Decl> = parse_decl(input);
-        let expected_output: Decl = Decl::Rewrite(Rewrite {
+        let expected_output: Decl = Decl::Rewrite(Rewrite::Rewrite(RewriteVariant{
             name: "MyName".to_string(),
             lhs: Term::Var("?a".to_string()),
             rhs: Term::Var("?b".to_string()),
             cond: None,
-            is_bidirectional: false,
-        });
+        }));
         assert!(output.is_ok());
         assert!(output.unwrap() == expected_output);
     }
@@ -242,13 +479,12 @@ mod tests {
         // two way rewrite with name
         let input: &str = "(birewrite \n MyName ?a \t ?b)";
         let output: Result<Decl> = parse_decl(input);
-        let expected_output: Decl = Decl::Rewrite(Rewrite {
+        let expected_output: Decl = Decl::Rewrite(Rewrite::BiRewrite( RewriteVariant {
             name: "MyName".to_string(),
             lhs: Term::Var("?a".to_string()),
             rhs: Term::Var("?b".to_string()),
             cond: None,
-            is_bidirectional: true,
-        });
+        }));
         assert!(output.is_ok());
         assert!(output.unwrap() == expected_output);
     }
@@ -258,13 +494,12 @@ mod tests {
         // one way rewrite with name and cond
         let input: &str = "(rewrite \n MyName ?a \t ?b :when True)";
         let output: Result<Decl> = parse_decl(input);
-        let expected_output: Decl = Decl::Rewrite(Rewrite {
+        let expected_output: Decl = Decl::Rewrite(Rewrite::Rewrite( RewriteVariant {
             name: "MyName".to_string(),
             lhs: Term::Var("?a".to_string()),
             rhs: Term::Var("?b".to_string()),
-            cond: Some(Term::BoolLit(true)),
-            is_bidirectional: false,
-        });
+            cond: Some(Term::Var("True".to_string())),
+        }));
         assert!(output.is_ok());
         assert!(output.unwrap() == expected_output);
     }
@@ -274,13 +509,13 @@ mod tests {
         // one way rewrite without name and cond
         let input: &str = "(rewrite \n ?a \t ?b :when \t False)";
         let output: Result<Decl> = parse_decl(input);
-        let expected_output: Decl = Decl::Rewrite(Rewrite {
-            name: String::new(),
+        let expected_output: Decl = Decl::Rewrite(Rewrite::Rewrite(RewriteVariant {
+            name: String::from(""),
             lhs: Term::Var("?a".to_string()),
             rhs: Term::Var("?b".to_string()),
-            cond: Some(Term::BoolLit(false)),
-            is_bidirectional: false,
-        });
+            cond: Some(Term::Var("False".to_string())),
+        }));
+        println!("{:?}", output);
         assert!(output.is_ok());
         assert!(output.unwrap() == expected_output);
     }
